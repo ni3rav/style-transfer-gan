@@ -1,0 +1,17 @@
+[project]
+name = "style-transfer-gan"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "ni3rav", email = "mahetan35@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+style-transfer-gan = "style_transfer_gan:main"
+
+[build-system]
+requires = ["uv_build>=0.12.4,<0.13.0"]
+build-backend = "uv_build"
