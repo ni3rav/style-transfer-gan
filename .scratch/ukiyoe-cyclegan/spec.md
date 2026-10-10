@@ -8,7 +8,7 @@ The local machine cannot train a CycleGAN. Colab's free plan does not connect th
 
 ## Outcome
 
-Training runs for 20 epochs, across more than one Colab session if the runtime drops. The notebook shows a loss chart and eight translated test photos. The resumable checkpoint and the loss log stay on Google Drive.
+Training runs for 20 epochs, across more than one Colab session if the runtime drops. The notebook shows a loss chart and eight translated test photos. During training that chart is one image, overwritten every 100 iterations from the full loss history. The resumable checkpoint and the loss log stay on Google Drive.
 
 ## Decisions
 
@@ -19,6 +19,7 @@ Training runs for 20 epochs, across more than one Colab session if the runtime d
 - The run is 20 epochs: `N_EPOCHS` 10 at learning rate 0.0002, then `N_EPOCHS_DECAY` 10 of linear decay. One free Colab session will not finish that. Run the notebook from the top again after a drop.
 - The only checkpoint kept is `MyDrive/ukiyoe-cyclegan/checkpoints/ukiyoe2photo/latest.pt`. `SAVES_PER_EPOCH` is 3, so each epoch writes it at one third, two thirds, and the end. The same write stores `loss_log.txt`. The file holds the network weights, optimizer state, learning-rate schedule, loss history, log text, and how far into the epoch training got. A file from the previous once-per-epoch schedule has no mid-epoch mark, so it still means that epoch finished. A newer mid-epoch file resumes the rest of that epoch. The loader shuffles, so the remaining steps see a new random sample. Finished epochs are not repeated.
 - The Kaggle notebook uses that same path under `/kaggle/working/drive/MyDrive/ukiyoe-cyclegan/`. It copies `latest.pt` and `loss_log.txt` from an attached input dataset whose folder is `checkpoints/ukiyoe2photo/`. The dataset zip is downloaded to `/tmp/datasets/ukiyoe2photo` and is not part of the notebook output. Kaggle does not mount Drive, so the new checkpoint has to be copied back to `MyDrive/ukiyoe-cyclegan/checkpoints/ukiyoe2photo/` before the next session.
+- Every 100 iterations the training cell prints the last five stat lines. The loss log still stores every line. The same step overwrites `checkpoints/ukiyoe2photo/loss_plot.png` with all losses recorded so far, and refreshes that one image in the cell output. The plot is not a second checkpoint.
 - After training, the notebook plots `D_A`, `G_A`, `cycle_A`, `idt_A`, `D_B`, `G_B`, `cycle_B`, and `idt_B`. It then translates 8 test photos and shows each photo beside its Ukiyo-e result and its reconstruction. Those images also go to `MyDrive/ukiyoe-cyclegan/results/ukiyoe2photo/test_latest/images/`.
 - Colab already provides PyTorch, torchvision, and Pillow. The notebook does not install packages.
 
@@ -41,4 +42,3 @@ Kaggle, when Colab is unavailable:
 - The paper's 200-epoch schedule.
 - Loading the generator on this machine.
 - Pix2pix and the other datasets shipped with the official repo.
-- A live loss chart while training is still running.
