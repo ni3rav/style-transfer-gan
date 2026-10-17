@@ -11,3 +11,10 @@ wheels/
 
 # Notebooks
 .ipynb_checkpoints/
+
+# Model checkpoints
+*.pt
+
+# Frontend
+node_modules/
+src/client/dist/

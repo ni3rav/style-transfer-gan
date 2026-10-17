@@ -7,11 +7,33 @@ authors = [
     { name = "ni3rav", email = "mahetan35@gmail.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "fastapi>=0.143.3",
+    "numpy>=2.5.4",
+    "pillow>=13.0.0",
+    "python-multipart>=0.0.32",
+    "torch>=2.14.1",
+    "uvicorn>=0.54.0",
+]
 
-[project.scripts]
-style-transfer-gan = "style_transfer_gan:main"
+[tool.uv]
+package = false
 
-[build-system]
-requires = ["uv_build>=0.12.4,<0.13.0"]
-build-backend = "uv_build"
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.1",
+    "pytest>=9.1.1",
+]

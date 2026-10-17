@@ -2,7 +2,7 @@
 
 ## Project
 
-This repo holds two notebooks that train a photo-to-Ukiyo-e CycleGAN. `ukiyoe_cyclegan.ipynb` runs on a Colab GPU. `ukiyoe_cyclegan_kaggle.ipynb` is the same training for Kaggle and keeps the checkpoint at `drive/MyDrive/ukiyoe-cyclegan/` under `/kaggle/working`. Do not train here, and do not load the generator on this machine.
+This repo holds two notebooks that train a photo-to-Ukiyo-e CycleGAN. `ukiyoe_cyclegan.ipynb` runs on a Colab GPU. `ukiyoe_cyclegan_kaggle.ipynb` is the same training for Kaggle and keeps the checkpoint at `drive/MyDrive/ukiyoe-cyclegan/` under `/kaggle/working`. Do not train here, and do not load the generator on this machine. This inference server may load `netG_A` on this machine. Training stays off this machine.
 
 `README.md` states the objective only. The plan is `.scratch/ukiyoe-cyclegan/spec.md`. Read that spec before changing the notebook.
 
