@@ -1,4 +1,13 @@
-const translateTimeoutMs = 120_000;
+import * as ort from "onnxruntime-web/wasm";
+import mjsUrl from "onnxruntime-web/ort-wasm-simd-threaded.mjs?url";
+import wasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.wasm?url";
+import { modelOutputToRgba, rgbaToModelInput, TRANSLATE_EDGE } from "@/lib/tensor";
+
+ort.env.wasm.numThreads = 1;
+ort.env.wasm.wasmPaths = {
+  wasm: wasmUrl,
+  mjs: mjsUrl,
+};
 
 export class TranslateError extends Error {
   constructor(message: string) {
@@ -12,46 +21,56 @@ export function retryMessage(detail: string): string {
   return `${sentence}. Translate again.`;
 }
 
-async function readFailureDetail(response: Response): Promise<string> {
-  try {
-    const body: unknown = await response.json();
-    if (
-      body &&
-      typeof body === "object" &&
-      "detail" in body &&
-      typeof body.detail === "string" &&
-      body.detail.trim()
-    ) {
-      return body.detail.trim();
-    }
-  } catch {
-    // A non-JSON body still needs a plain failure message.
-  }
-  return "The translation did not finish.";
+let sessionPromise: Promise<ort.InferenceSession> | null = null;
+
+function generator(): Promise<ort.InferenceSession> {
+  sessionPromise ??= ort.InferenceSession.create("/g_a.onnx", {
+    executionProviders: ["wasm"],
+  });
+  return sessionPromise;
 }
 
 export async function translatePhoto(image: Blob): Promise<Blob> {
-  const body = new FormData();
-  body.append("image", image, "photo.png");
-  const response = await fetch("/api/translate", {
-    method: "POST",
-    body,
-    cache: "no-store",
-    signal: AbortSignal.timeout(translateTimeoutMs),
-  });
-
-  if (response.status === 400) {
-    throw new TranslateError(await readFailureDetail(response));
+  const bitmap = await createImageBitmap(image);
+  const canvas = document.createElement("canvas");
+  canvas.width = TRANSLATE_EDGE;
+  canvas.height = TRANSLATE_EDGE;
+  try {
+    if (bitmap.width !== TRANSLATE_EDGE || bitmap.height !== TRANSLATE_EDGE) {
+      throw new TranslateError(`Image must be ${TRANSLATE_EDGE} by ${TRANSLATE_EDGE}.`);
+    }
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) {
+      throw new TranslateError("The translation did not finish.");
+    }
+    context.drawImage(bitmap, 0, 0);
+    const pixels = context.getImageData(0, 0, TRANSLATE_EDGE, TRANSLATE_EDGE).data;
+    const session = await generator();
+    const result = await session.run({
+      image: new ort.Tensor("float32", rgbaToModelInput(pixels), [1, 3, TRANSLATE_EDGE, TRANSLATE_EDGE]),
+    });
+    const output = result.print;
+    if (!(output?.data instanceof Float32Array) || output.data.length !== 3 * TRANSLATE_EDGE * TRANSLATE_EDGE) {
+      throw new TranslateError("The translation did not finish.");
+    }
+    const imageData = new ImageData(TRANSLATE_EDGE, TRANSLATE_EDGE);
+    imageData.data.set(modelOutputToRgba(output.data));
+    context.putImageData(imageData, 0, 0);
+    const translated = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/png");
+    });
+    if (!translated) {
+      throw new TranslateError("The translation did not finish.");
+    }
+    return translated;
+  } catch (caught) {
+    if (caught instanceof TranslateError) {
+      throw caught;
+    }
+    throw new TranslateError(
+      caught instanceof Error && caught.message ? caught.message : "The translation did not finish.",
+    );
+  } finally {
+    bitmap.close();
   }
-  if (!response.ok) {
-    throw new TranslateError("The translation did not finish.");
-  }
-
-  const type = response.headers.get("content-type") ?? "";
-  if (!type.includes("image/png")) {
-    throw new TranslateError("The translation did not finish.");
-  }
-
-  const result = await response.blob();
-  return result.type === "image/png" ? result : new Blob([result], { type: "image/png" });
 }

@@ -12,7 +12,11 @@ During training, every 100 iterations the cell prints the last five stat lines a
 
 ## Translate a photo locally
 
-The local app loads `G_A` from `src/server/ukiyoe_cyclegan.pt`. That file is the finished checkpoint and is not committed.
+The page runs `G_A` in the browser from `src/client/public/g_a.onnx`. That file is the generator only, about 45 MB. The 340 MB training checkpoint stays at `src/server/ukiyoe_cyclegan.pt` and is not committed. Rebuild the ONNX file from it with:
+
+```sh
+PYTHONPATH=src uv run python src/server/export_onnx.py
+```
 
 From the repo root:
 
@@ -22,6 +26,6 @@ From the repo root:
 
 The script installs the Python and npm dependencies, builds the page, and serves it at http://127.0.0.1:8000.
 
-On the page, choose one photo. The browser stretches it to 256×256 and uploads that PNG. The page shows the 256×256 picture beside the Ukiyo-e result. A 256×256 pass on this machine's CPU can take about half a minute. A second request waits for the first. An upload that is not 256×256 is rejected. The server does not resize.
+On the page, choose one photo. The browser stretches it to 256×256, runs the ONNX model, and shows that picture beside the Ukiyo-e result. The first translation also downloads the model file.
 
-Stop the server with Ctrl+C in the terminal that ran `./start`.
+To put the page on Vercel, set the project root to `src/client`, the framework to Vite, the build command to `npm run build`, and the output directory to `dist`. The ONNX file has to be in the deployment. The training checkpoint does not.

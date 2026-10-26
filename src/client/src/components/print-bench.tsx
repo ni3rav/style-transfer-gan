@@ -73,7 +73,7 @@ export function PrintBench() {
 
   const printMessage =
     phase === "translating"
-      ? "Translating. This usually takes about half a minute."
+      ? "Translating in this browser."
       : "The print will appear here.";
 
   return (
