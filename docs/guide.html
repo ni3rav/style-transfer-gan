@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ukiyo-e notes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #e4d0a8;
+      --sheet: #f6efe0;
+      --ink: #241c16;
+      --indigo: #1b4668;
+      --rule: #241c16;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { background: var(--paper); }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "Shippori Mincho", Palatino, "Iowan Old Style", serif;
+      font-weight: 400;
+      font-size: 1.125rem;
+      line-height: 1.55;
+    }
+
+    .sheet {
+      width: min(68rem, calc(100% - 2rem));
+      margin: 2.5rem auto 4rem;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(2.6rem, 6vw, 4.25rem);
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+    }
+
+    header p {
+      max-width: 38rem;
+      margin: 0.8rem 0 0;
+      font-size: 1.2rem;
+    }
+
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      margin: 2rem 0 0;
+      border: 1px solid var(--rule);
+    }
+
+    .tabs button {
+      flex: 1 1 14rem;
+      margin: 0;
+      padding: 0.85rem 1rem;
+      border: 0;
+      border-right: 1px solid var(--rule);
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-size: 1.05rem;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .tabs button:last-child { border-right: 0; }
+
+    .tabs button[aria-selected="true"] {
+      background: var(--indigo);
+      color: var(--sheet);
+    }
+
+    .tabs button:focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: -4px;
+    }
+
+    .panel {
+      display: none;
+      padding: 1.6rem 1.4rem 2rem;
+      border: 1px solid var(--rule);
+      border-top: 0;
+      background: var(--sheet);
+    }
+
+    .panel.active { display: block; }
+
+    .panel h2 {
+      margin: 1.6rem 0 0.4rem;
+      font-size: 1.55rem;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .panel h2:first-child { margin-top: 0; }
+
+    .panel p,
+    .panel li { max-width: 66ch; }
+
+    .panel ul,
+    .panel ol { padding-left: 1.2rem; }
+
+    .panel li + li { margin-top: 0.35rem; }
+
+    table {
+      width: 100%;
+      margin: 1rem 0 1.2rem;
+      border-collapse: collapse;
+      font-size: 1rem;
+    }
+
+    th,
+    td {
+      padding: 0.45rem 0.6rem;
+      border-bottom: 1px solid var(--rule);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { font-weight: 600; }
+
+    code {
+      font-family: "Shippori Mincho", Palatino, serif;
+      font-weight: 500;
+    }
+
+    pre {
+      max-width: 100%;
+      overflow-x: auto;
+      margin: 1rem 0;
+      padding: 0.8rem 1rem;
+      border: 1px solid var(--rule);
+      background: var(--paper);
+    }
+
+    pre code { font-weight: 400; }
+
+    @media (max-width: 640px) {
+      .sheet { width: min(100% - 1.2rem, 68rem); margin-top: 1.4rem; }
+      .tabs button { flex-basis: 100%; border-right: 0; border-bottom: 1px solid var(--rule); }
+      .tabs button:last-child { border-bottom: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main class="sheet">
+    <header>
+      <h1>Ukiyo-e</h1>
+      <p>Notes on the finished photo-to-print model, the charts in the training notebook, and how to run it.</p>
+    </header>
+
+    <div class="tabs" role="tablist" aria-label="Notes">
+      <button id="tab-model" type="button" role="tab" aria-selected="true" aria-controls="panel-model">How the model works</button>
+      <button id="tab-results" type="button" role="tab" aria-selected="false" aria-controls="panel-results" tabindex="-1">How to read the results</button>
+      <button id="tab-run" type="button" role="tab" aria-selected="false" aria-controls="panel-run" tabindex="-1">How to run</button>
+    </div>
+
+    <section id="panel-model" class="panel active" role="tabpanel" aria-labelledby="tab-model">
+      <p>This is a CycleGAN trained on the official unpaired <code>ukiyoe2photo</code> set. Domain A is Ukiyo-e prints. Domain B is landscape photos. Nothing in the training set is a before-and-after pair, so the model cannot copy a paired example.</p>
+      <p>The finished run is the 20-epoch checkpoint described in <code>src/notebooks/trained_fin.ipynb</code>.</p>
+
+      <h2>The four networks</h2>
+      <p>The model learns two translators and two critics.</p>
+      <ul>
+        <li><code>G_A</code>, about 11.378 million parameters, turns a photo into a Ukiyo-e image. This is the network used after training.</li>
+        <li><code>G_B</code>, the same size, turns a Ukiyo-e image back into a photo.</li>
+        <li><code>D_A</code>, about 2.765 million parameters, judges whether an image belongs to the Ukiyo-e set.</li>
+        <li><code>D_B</code>, the same size, judges whether an image belongs to the photo set.</li>
+      </ul>
+      <p>Each generator is a 9-block ResNet: reflect-pad, a 7×7 convolution, two stride-2 downsamplings, nine residual blocks, two transposed convolutions, and a tanh output. Each critic is a 70×70 PatchGAN with three layers. Normalization is instance norm without an affine scale, and dropout is off. Weights start from a normal distribution with standard deviation 0.02.</p>
+      <p>Direction <code>BtoA</code> swaps the loaded batches before the loss. In the saved test pictures, <code>real_A</code> is the photo, <code>fake_B</code> is the Ukiyo-e translation, and <code>rec_A</code> is the photo reconstructed from that translation.</p>
+
+      <h2>One training step</h2>
+      <p>One step draws a photo and a print independently. The batch size is 1.</p>
+      <ol>
+        <li>The photo goes through <code>G_A</code> and then <code>G_B</code>. The result should match the original photo.</li>
+        <li>The print goes through <code>G_B</code> and then <code>G_A</code>. The result should match the original print.</li>
+        <li><code>G_A</code> is also shown a real print and asked to leave it alone. <code>G_B</code> is shown a real photo and asked to leave it alone. That identity term keeps the generator from repainting color when the input is already in the target style.</li>
+        <li><code>D_A</code> tries to accept real prints and reject generated prints. <code>D_B</code> does the same for photos. The generators try to make the critics accept their fakes.</li>
+        <li>The critic is not trained only on the latest fake. A replay buffer of 50 images sometimes substitutes an older fake, so the critic does not forget earlier generator mistakes.</li>
+      </ol>
+      <p>The adversarial term is least-squares GAN loss: mean squared error against 1 for a real target and 0 for a fake target. The cycle and identity terms are L1. Cycle loss is multiplied by 10. Identity loss is that cycle term multiplied by 0.5, so its logged weight is 5.</p>
+      <p>There is no paired reconstruction loss against a ground-truth print of the same scene. A close reconstructed photo means the two generators kept the content. It does not by itself mean the print looks like a woodblock.</p>
+      <p>After training, inference uses <code>G_A</code> only.</p>
+
+      <h2>Configuration of the finished run</h2>
+      <table>
+        <thead>
+          <tr><th>Choice</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Dataset</td><td><code>ukiyoe2photo</code>, downloaded in the notebook</td></tr>
+          <tr><td>Steps per epoch</td><td>6,287, the size of the larger domain</td></tr>
+          <tr><td>Epochs</td><td>10 at learning rate 0.0002, then 10 of linear decay</td></tr>
+          <tr><td>Optimizer</td><td>Adam, β1 0.5, β2 0.999</td></tr>
+          <tr><td>Batch</td><td>1</td></tr>
+          <tr><td>Train crop</td><td>resize to 286, random crop to 256, random horizontal flip</td></tr>
+          <tr><td>Test crop</td><td>resize to 256, no flip</td></tr>
+          <tr><td>GAN</td><td>least squares</td></tr>
+          <tr><td>Replay buffer</td><td>50 images</td></tr>
+          <tr><td>Cycle weight</td><td>10</td></tr>
+          <tr><td>Identity weight</td><td>0.5</td></tr>
+          <tr><td>Logged</td><td>every 100 iterations</td></tr>
+          <tr><td>Checkpoint</td><td><code>latest.pt</code>, three times per epoch</td></tr>
+          <tr><td>Machine in the saved run</td><td>Tesla T4</td></tr>
+        </tbody>
+      </table>
+      <p>The saved notebook ends with the learning rate moving from 0.0000182 to 0, then <code>latest.pt</code> saved at the end of epoch 20. The last epoch took 4,910 seconds. The learning rate is now zero, so running the training notebook again does not continue training.</p>
+      <p>The paper's usual schedule is 200 epochs. This run is the 20-epoch schedule above.</p>
+
+      <h2>What each loss is pushing on</h2>
+      <ul>
+        <li>The GAN loss is the style pressure. It asks the translation to look like the other collection.</li>
+        <li>Cycle loss is the content anchor. It asks a round trip to come back to the same picture.</li>
+        <li>Identity loss is the color anchor. It asks a generator to leave an image alone when that image is already in the target style.</li>
+      </ul>
+      <p>Instance norm, a PatchGAN, least-squares loss, and the replay buffer are the CycleGAN defaults this training kept.</p>
+    </section>
+
+    <section id="panel-results" class="panel" role="tabpanel" aria-labelledby="tab-results" hidden>
+      <p>Open <code>src/notebooks/trained_fin.ipynb</code>. The loss chart is the figure after the training cell. The eight test rows are the last figure. A single printed log line is one image at one step.</p>
+      <p>The notebook's own training output resumed at epoch 17 and ended at epoch 20. The chart still contains all 20 epochs, because the checkpoint restores the earlier loss history.</p>
+
+      <h2>What was measured</h2>
+      <p>Eight training losses, plus a visual check of eight test photos. No FID, LPIPS, SSIM, or classification accuracy was computed.</p>
+      <p>The training cell prints only the latest five lines, and those windows overlap. Use the chart for the history.</p>
+      <p>The names follow the code after the <code>BtoA</code> swap:</p>
+      <ul>
+        <li><code>D_A</code> and <code>G_A</code> are the Ukiyo-e critic and the generator trying to fool it.</li>
+        <li><code>D_B</code> and <code>G_B</code> are the photo critic and the generator trying to fool it.</li>
+        <li><code>cycle_A</code> is photo → print → photo, already multiplied by 10.</li>
+        <li><code>cycle_B</code> is print → photo → print, already multiplied by 10.</li>
+        <li><code>idt_A</code> is <code>G_A</code> asked to leave a real print unchanged, already multiplied by 5.</li>
+        <li><code>idt_B</code> is <code>G_B</code> asked to leave a real photo unchanged, already multiplied by 5.</li>
+      </ul>
+      <p>The last logged step is epoch 20, iteration 125,700: <code>D_A</code> 0.037, <code>G_A</code> 0.695, <code>cycle_A</code> 0.822, <code>idt_A</code> 0.356, <code>D_B</code> 0.105, <code>G_B</code> 0.534, <code>cycle_B</code> 0.570, <code>idt_B</code> 0.258. Quote the shape of the chart. Quote that line only as an example of one step.</p>
+
+      <h2>How to read the eight graphs</h2>
+      <p>Each panel is one loss. The horizontal axis is a log step, not an epoch. One point is written every 100 training iterations. An epoch of 6,287 images is about 63 points. Twenty epochs are about 1,257 points, which is why the axis runs to roughly 1,250. The first half of the axis is the constant learning rate. The second half is the decay.</p>
+      <p>The vertical scales are not the same. A cycle value near 1 and a discriminator value near 0.2 are not the same kind of number. The cycle and identity panels already include their weights.</p>
+      <p>The adversarial panels, <code>D_A</code>, <code>G_A</code>, <code>D_B</code>, and <code>G_B</code>, stay jagged for the whole run. <code>D_A</code> and <code>D_B</code> sit mostly between about 0.05 and 0.3, with spikes above 0.5. <code>G_A</code> and <code>G_B</code> sit mostly between about 0.2 and 1.0, with spikes near 1.75. They do not fall toward zero. For a least-squares GAN that is a balance: the critic keeps detecting some fakes, and the generator keeps fooling it on others. A spike is one difficult image, because the point is one batch of size 1.</p>
+      <p>The cycle and identity panels are the content curves. <code>cycle_A</code> starts near 8 and <code>cycle_B</code> near 4.5. Both fall within the first few epochs, about the first 200 log steps, and then sit in a noisy band around 1. <code>idt_A</code> starts near 2 and <code>idt_B</code> near 2.5, fall on the same early schedule, and then stay mostly below 1. <code>idt_B</code> has one sharp spike near 4 later in training. The early drop means the round trip started preserving the input. The later flat band means that part of training had settled. The line does not become smooth at the end, because each point is still one image.</p>
+
+      <h2>The eight test rows</h2>
+      <p>The last figure shows eight test photos. Each row is the photo, the <code>G_A</code> translation, and the reconstructed photo.</p>
+      <p>The reconstructions generally keep the scene. That matches the cycle loss settling near 1. The middle column is uneven. Some rows, such as the canal and the duck, read as painted. Others look closer to a grain laid over the photograph. The last landscape loses the hills. That is the quality this 20-epoch checkpoint reached. The figure is a sample of eight images, not a score over the whole test set.</p>
+
+      <h2>Points worth saying</h2>
+      <ul>
+        <li>The training signal for style is unpaired. The cycle forces content to survive a round trip. The critic forces the output onto the look of the other set.</li>
+        <li>Identity loss is a color anchor. Cycle loss is a content anchor. The GAN loss is the style pressure.</li>
+        <li>The displayed adversarial losses are supposed to look noisy. The cycle and identity losses are the ones that should fall and then level off.</li>
+        <li>After epoch 20 the learning rate is zero and <code>latest.pt</code> is the finished checkpoint.</li>
+      </ul>
+    </section>
+
+    <section id="panel-run" class="panel" role="tabpanel" aria-labelledby="tab-run" hidden>
+      <h2>Train</h2>
+      <p>Training does not run on this machine. Upload <code>src/notebooks/ukiyoe_cyclegan.ipynb</code> to Colab, set the runtime to a T4 GPU, and run the cells from the top.</p>
+      <p>The schedule is 20 epochs: 10 at learning rate 0.0002, then 10 of linear decay. One free session will not finish that. If the session drops, start a new one and run the cells from the top again. Training continues from <code>MyDrive/ukiyoe-cyclegan/checkpoints/ukiyoe2photo/latest.pt</code>. A file saved at the end of an epoch resumes at the next epoch. A file saved partway through resumes the rest of that epoch.</p>
+      <p>The finished run is already stored. <code>src/notebooks/trained_fin.ipynb</code> shows epoch 20 ending with the learning rate at 0. Running the training notebook again on that checkpoint does not train further.</p>
+      <p>During training, every 100 iterations the cell prints the last five stat lines and overwrites <code>checkpoints/ukiyoe2photo/loss_plot.png</code> with the full loss history.</p>
+
+      <h2>Translate a photo locally</h2>
+      <p>The local app loads <code>G_A</code> from <code>src/server/ukiyoe_cyclegan.pt</code>. That file is the finished checkpoint and is not committed.</p>
+      <p>From the repo root:</p>
+      <pre><code>./start</code></pre>
+      <p>The script installs the Python and npm dependencies, builds the page, and serves it at http://127.0.0.1:8000.</p>
+      <p>On the page, choose one photo. The browser stretches it to 256×256 and uploads that PNG. The page shows the 256×256 picture beside the Ukiyo-e result. A 256×256 pass on this machine's CPU can take about half a minute. A second request waits for the first. An upload that is not 256×256 is rejected. The server does not resize.</p>
+      <p>Stop the server with Ctrl+C in the terminal that ran <code>./start</code>.</p>
+    </section>
+  </main>
+  <script>
+    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const panels = Array.from(document.querySelectorAll('[role="tabpanel"]'));
+
+    function select(tab) {
+      tabs.forEach((item) => {
+        const on = item === tab;
+        item.setAttribute("aria-selected", on ? "true" : "false");
+        item.tabIndex = on ? 0 : -1;
+      });
+      panels.forEach((panel) => {
+        const on = panel.id === tab.getAttribute("aria-controls");
+        panel.classList.toggle("active", on);
+        panel.hidden = !on;
+      });
+      history.replaceState(null, "", "#" + tab.id.replace("tab-", ""));
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => {
+        select(tab);
+        tab.focus();
+      });
+      tab.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+        event.preventDefault();
+        const next = event.key === "ArrowRight"
+          ? tabs[(index + 1) % tabs.length]
+          : tabs[(index - 1 + tabs.length) % tabs.length];
+        select(next);
+        next.focus();
+      });
+    });
+
+    const fromHash = document.getElementById("tab-" + location.hash.slice(1));
+    if (fromHash) select(fromHash);
+  </script>
+</body>
+</html>
