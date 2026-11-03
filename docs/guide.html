@@ -83,6 +83,29 @@
       outline-offset: -4px;
     }
 
+    a { color: var(--indigo); }
+
+    a:focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 3px;
+    }
+
+    .text-link {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--indigo);
+      font: inherit;
+      text-decoration: underline;
+      text-underline-offset: 0.15em;
+      cursor: pointer;
+    }
+
+    .text-link:focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 3px;
+    }
+
     .panel {
       display: none;
       padding: 1.6rem 1.4rem 2rem;
@@ -158,128 +181,208 @@
   <main class="sheet">
     <header>
       <h1>Ukiyo-e</h1>
-      <p>Notes on the finished photo-to-print model, the charts in the training notebook, and how to run it.</p>
+      <p>A walkthrough of the photo-to-print model, the charts from the finished run, and the page that runs it.</p>
     </header>
 
     <div class="tabs" role="tablist" aria-label="Notes">
       <button id="tab-model" type="button" role="tab" aria-selected="true" aria-controls="panel-model">How the model works</button>
       <button id="tab-results" type="button" role="tab" aria-selected="false" aria-controls="panel-results" tabindex="-1">How to read the results</button>
       <button id="tab-run" type="button" role="tab" aria-selected="false" aria-controls="panel-run" tabindex="-1">How to run</button>
+      <button id="tab-deploy" type="button" role="tab" aria-selected="false" aria-controls="panel-deploy" tabindex="-1">How to deploy</button>
     </div>
 
     <section id="panel-model" class="panel active" role="tabpanel" aria-labelledby="tab-model">
-      <p>This is a CycleGAN trained on the official unpaired <code>ukiyoe2photo</code> set. Domain A is Ukiyo-e prints. Domain B is landscape photos. Nothing in the training set is a before-and-after pair, so the model cannot copy a paired example.</p>
-      <p>The finished run is the 20-epoch checkpoint described in <code>src/notebooks/trained_fin.ipynb</code>.</p>
+      <p>A landscape photo goes in. What comes out is meant to be the same place, drawn in the manner of a Japanese woodblock print: heavier outlines, flatter color, the grain and palette of the prints in the training set. That print style is the Ukiyo-e side of this project.</p>
+      <p>You already know a generator and a discriminator. The rest of this note is about why this particular model needs two of each, what one training step is asking them to do, and how the names in the notebook line up with those jobs.</p>
+      <p>The finished run is the 20-epoch checkpoint recorded in <code>src/notebooks/trained_fin.ipynb</code>. The numbers below were read from that notebook.</p>
+
+      <h2>Two collections, and no matched pairs</h2>
+      <p>A normal image-to-image network wants a correct answer for each input. You would show it a photo and the woodblock print of that same photo, and ask it to match the print.</p>
+      <p>This training set does not work that way. It is the public <code>ukiyoe2photo</code> collection: one folder of woodblock prints, and another folder of landscape photographs. A print in the first folder is not the woodblock version of a photograph in the second. They are two separate piles of pictures.</p>
+      <p>Training can therefore ask for two things only. The output should look as if it belongs in the print pile. And the place in the photograph should still be recognizable after the translation. There is no third image that says what the correct print of that exact scene would be.</p>
+
+      <h2>Translate both ways, so the scene has a way home</h2>
+      <p>The model learns the translation in both directions at the same time.</p>
+      <p>One network turns photographs into prints. Another turns prints back into photographs. Take a photo, make a print, then turn that print back into a photo. You should get the photo you started with. Take a print, make a photo, then turn that photo back into a print. You should get the print you started with.</p>
+      <p>That round trip is the stand-in for a paired answer. If the bridge, the hill, or the boat disappeared on the way out, the way back would fail. Each direction is what keeps the other one honest about content.</p>
+      <p>Style is still a GAN problem, played once for each pile. A critic of prints tries to tell real prints from generated ones. A critic of photographs does the same for photos. The translators try to make those critics accept what they made.</p>
 
       <h2>The four networks</h2>
-      <p>The model learns two translators and two critics.</p>
+      <p>After the naming swap described in the next section, the four networks are these.</p>
       <ul>
-        <li><code>G_A</code>, about 11.378 million parameters, turns a photo into a Ukiyo-e image. This is the network used after training.</li>
-        <li><code>G_B</code>, the same size, turns a Ukiyo-e image back into a photo.</li>
-        <li><code>D_A</code>, about 2.765 million parameters, judges whether an image belongs to the Ukiyo-e set.</li>
-        <li><code>D_B</code>, the same size, judges whether an image belongs to the photo set.</li>
+        <li>The photo-to-print network is <code>G_A</code>. It has about 11.378 million parameters. The website uses this network and no other.</li>
+        <li>The print-to-photo network is <code>G_B</code>. It is the same size. It exists so the round trip can be checked, and so the model also learns the reverse translation while training.</li>
+        <li>The print critic is <code>D_A</code>. It has about 2.765 million parameters. It looks at real prints and at the prints <code>G_A</code> just made.</li>
+        <li>The photo critic is <code>D_B</code>. It is the same size. It looks at real photographs and at the photographs <code>G_B</code> just made.</li>
       </ul>
-      <p>Each generator is a 9-block ResNet: reflect-pad, a 7×7 convolution, two stride-2 downsamplings, nine residual blocks, two transposed convolutions, and a tanh output. Each critic is a 70×70 PatchGAN with three layers. Normalization is instance norm without an affine scale, and dropout is off. Weights start from a normal distribution with standard deviation 0.02.</p>
-      <p>Direction <code>BtoA</code> swaps the loaded batches before the loss. In the saved test pictures, <code>real_A</code> is the photo, <code>fake_B</code> is the Ukiyo-e translation, and <code>rec_A</code> is the photo reconstructed from that translation.</p>
 
-      <h2>One training step</h2>
-      <p>One step draws a photo and a print independently. The batch size is 1.</p>
+      <h2>Why the letters in the notebook feel backwards</h2>
+      <p>In the dataset, domain A is the prints and domain B is the photographs. The training option is called <code>BtoA</code>, which means translate B into A: photographs into prints.</p>
+      <p>Before each loss is computed, the code swaps the two loaded batches. Inside that loss, the photograph is stored under the name <code>real_A</code>, and the print is stored under the name <code>real_B</code>. <code>G_A</code> reads <code>real_A</code> and writes a print. So the letter A on the dataset means prints, while the letter A on <code>real_A</code> in the saved pictures means the photo being translated.</p>
+      <p>Read the saved test grid with that swap in mind:</p>
+      <ul>
+        <li><code>real_A</code> is the photograph.</li>
+        <li><code>fake_B</code> is the print made by <code>G_A</code>.</li>
+        <li><code>rec_A</code> is that print sent back through <code>G_B</code>, the reconstructed photograph.</li>
+        <li><code>real_B</code> is a real print from the other folder.</li>
+        <li><code>fake_A</code> is the photograph made from that print by <code>G_B</code>.</li>
+        <li><code>rec_B</code> is that photograph sent back through <code>G_A</code>, the reconstructed print.</li>
+      </ul>
+
+      <h2>What one training step does</h2>
+      <p>Each step draws one photograph and one print, independently. They are not a pair. The batch size is 1, so a line in the log is the story of a single image, not an average over the epoch.</p>
       <ol>
-        <li>The photo goes through <code>G_A</code> and then <code>G_B</code>. The result should match the original photo.</li>
-        <li>The print goes through <code>G_B</code> and then <code>G_A</code>. The result should match the original print.</li>
-        <li><code>G_A</code> is also shown a real print and asked to leave it alone. <code>G_B</code> is shown a real photo and asked to leave it alone. That identity term keeps the generator from repainting color when the input is already in the target style.</li>
-        <li><code>D_A</code> tries to accept real prints and reject generated prints. <code>D_B</code> does the same for photos. The generators try to make the critics accept their fakes.</li>
-        <li>The critic is not trained only on the latest fake. A replay buffer of 50 images sometimes substitutes an older fake, so the critic does not forget earlier generator mistakes.</li>
+        <li>The photograph goes through <code>G_A</code>, which tries to make a print. That print goes through <code>G_B</code>, which tries to recover the photograph. The difference between the recovery and the original photograph is <code>cycle_A</code>.</li>
+        <li>The print goes through <code>G_B</code>, which tries to make a photograph. That photograph goes through <code>G_A</code>, which tries to recover the print. The difference from the original print is <code>cycle_B</code>.</li>
+        <li><code>G_A</code> is also handed a real print and asked to give that print back unchanged. <code>G_B</code> is handed a real photograph and asked to give that photograph back unchanged. These are <code>idt_A</code> and <code>idt_B</code>. They stop a translator from recoloring an image that is already in the style it is supposed to produce.</li>
+        <li><code>D_A</code> tries to accept real prints and reject generated prints. <code>D_B</code> does the same for photographs. The translators are trained to make the critics accept their fakes. For that step the critics are frozen, then the critics are trained while the translators are held still.</li>
+        <li>The critic is not always shown the fake from this exact step. A replay buffer keeps 50 recent fakes. Sometimes an older one is substituted, so the critic does not forget mistakes the translator has already moved on from.</li>
       </ol>
-      <p>The adversarial term is least-squares GAN loss: mean squared error against 1 for a real target and 0 for a fake target. The cycle and identity terms are L1. Cycle loss is multiplied by 10. Identity loss is that cycle term multiplied by 0.5, so its logged weight is 5.</p>
-      <p>There is no paired reconstruction loss against a ground-truth print of the same scene. A close reconstructed photo means the two generators kept the content. It does not by itself mean the print looks like a woodblock.</p>
-      <p>After training, inference uses <code>G_A</code> only.</p>
 
-      <h2>Configuration of the finished run</h2>
+      <h2>How hard each pressure pulls</h2>
+      <p>The critic uses least-squares loss. A real image is asked to score 1, a fake is asked to score 0, and the penalty is the squared distance from that target. When the critic is already very sure, this still gives the translator a usable push.</p>
+      <p>The round trip and the identity check use L1: the average absolute difference between pixel values. Pixel values inside the network run from -1 to 1.</p>
+      <p>The round-trip error is multiplied by 10 before it is added in. That 10 is the cycle weight. The identity error uses half of that weight, so it is multiplied by 5. The chart and the log already include those multipliers. A plotted cycle value near 1 means the underlying average absolute error is about 0.1 on that -1 to 1 scale.</p>
+      <p>A small round-trip error means the two translators preserved the picture well enough to come home. Looking like a woodblock is the critics' job. The test pictures at the end of the notebook are where you judge that by eye.</p>
+
+      <h2>What the networks are made of</h2>
+      <p>Both translators are a ResNet with nine residual blocks, the usual CycleGAN generator. The image is padded by mirroring its own edges, so the border is a reflection of the picture. A first convolution reads a wide neighborhood of each pixel. Two stride-2 layers shrink the map to a quarter of the width and height. Nine residual blocks then change that map, and each block can also pass its input through, which lets a deep stack edit the picture without rebuilding the layout from nothing. Two transposed convolutions restore the full size. The last layer is <code>tanh</code>, so every output sits between -1 and 1.</p>
+      <p>Both critics are 70×70 PatchGANs with three layers. They score overlapping patches about 70 pixels across, rather than giving one score for the whole frame. The translator is pushed on local texture: the line, the flat color, the grain.</p>
+      <p>Inside the translator, normalization is instance norm. Each image is centered and scaled using its own statistics, with no learned scale or shift on top of that. Dropout is off. Weights start from a normal distribution with standard deviation 0.02. Those are the CycleGAN defaults this run kept.</p>
+
+      <h2>The schedule that was actually run</h2>
+      <p>The CycleGAN paper often trains for 200 epochs. This run uses 20.</p>
+      <p>One epoch is one pass over the larger folder, 6,287 images. The smaller folder is sampled so that every step still has one image from each side.</p>
       <table>
         <thead>
-          <tr><th>Choice</th><th>Value</th></tr>
+          <tr><th>Choice</th><th>What it means here</th></tr>
         </thead>
         <tbody>
-          <tr><td>Dataset</td><td><code>ukiyoe2photo</code>, downloaded in the notebook</td></tr>
-          <tr><td>Steps per epoch</td><td>6,287, the size of the larger domain</td></tr>
-          <tr><td>Epochs</td><td>10 at learning rate 0.0002, then 10 of linear decay</td></tr>
+          <tr><td>Dataset</td><td><code>ukiyoe2photo</code>, two unpaired folders, downloaded in the notebook</td></tr>
+          <tr><td>Steps per epoch</td><td>6,287</td></tr>
+          <tr><td>Epochs</td><td>10 at learning rate 0.0002, then 10 in which the learning rate falls in a straight line to 0</td></tr>
           <tr><td>Optimizer</td><td>Adam, β1 0.5, β2 0.999</td></tr>
-          <tr><td>Batch</td><td>1</td></tr>
-          <tr><td>Train crop</td><td>resize to 286, random crop to 256, random horizontal flip</td></tr>
-          <tr><td>Test crop</td><td>resize to 256, no flip</td></tr>
-          <tr><td>GAN</td><td>least squares</td></tr>
-          <tr><td>Replay buffer</td><td>50 images</td></tr>
-          <tr><td>Cycle weight</td><td>10</td></tr>
-          <tr><td>Identity weight</td><td>0.5</td></tr>
-          <tr><td>Logged</td><td>every 100 iterations</td></tr>
-          <tr><td>Checkpoint</td><td><code>latest.pt</code>, three times per epoch</td></tr>
+          <tr><td>Batch</td><td>1 image from each folder</td></tr>
+          <tr><td>Training crop</td><td>stretch to 286×286, random 256 crop, random left-right flip</td></tr>
+          <tr><td>Test size</td><td>stretch to 256×256, no flip</td></tr>
+          <tr><td>GAN loss</td><td>least squares, targets 1 and 0</td></tr>
+          <tr><td>Replay buffer</td><td>50 generated images</td></tr>
+          <tr><td>Cycle weight</td><td>10, already included in the plotted cycle values</td></tr>
+          <tr><td>Identity weight</td><td>0.5, so the plotted identity values include a factor of 5</td></tr>
+          <tr><td>Log</td><td>one line every 100 steps</td></tr>
+          <tr><td>Checkpoint</td><td>one file, <code>latest.pt</code>, overwritten three times per epoch, carrying the full loss history</td></tr>
           <tr><td>Machine in the saved run</td><td>Tesla T4</td></tr>
         </tbody>
       </table>
-      <p>The saved notebook ends with the learning rate moving from 0.0000182 to 0, then <code>latest.pt</code> saved at the end of epoch 20. The last epoch took 4,910 seconds. The learning rate is now zero, so running the training notebook again does not continue training.</p>
-      <p>The paper's usual schedule is 200 epochs. This run is the 20-epoch schedule above.</p>
+      <p>The saved notebook ends with the learning rate moving from 0.0000182 to 0, then <code>latest.pt</code> written at the end of epoch 20. That last epoch took 4,910 seconds. The learning rate is now zero, so opening the training notebook and running it again on this checkpoint does not train further.</p>
 
-      <h2>What each loss is pushing on</h2>
-      <ul>
-        <li>The GAN loss is the style pressure. It asks the translation to look like the other collection.</li>
-        <li>Cycle loss is the content anchor. It asks a round trip to come back to the same picture.</li>
-        <li>Identity loss is the color anchor. It asks a generator to leave an image alone when that image is already in the target style.</li>
-      </ul>
-      <p>Instance norm, a PatchGAN, least-squares loss, and the replay buffer are the CycleGAN defaults this training kept.</p>
+      <h2>What is left once training is over</h2>
+      <p>Inference uses <code>G_A</code> only. <code>G_B</code> and both critics stay inside the checkpoint because that is how the training code saves the whole model, and the page does not load them. The browser copy of <code>G_A</code> is on the <button type="button" class="text-link" data-tab="run">How to run</button> tab.</p>
     </section>
 
     <section id="panel-results" class="panel" role="tabpanel" aria-labelledby="tab-results" hidden>
-      <p>Open <code>src/notebooks/trained_fin.ipynb</code>. The loss chart is the figure after the training cell. The eight test rows are the last figure. A single printed log line is one image at one step.</p>
-      <p>The notebook's own training output resumed at epoch 17 and ended at epoch 20. The chart still contains all 20 epochs, because the checkpoint restores the earlier loss history.</p>
+      <p>Open <code>src/notebooks/trained_fin.ipynb</code>. Two pictures matter. The loss chart is the figure drawn after the training cell. The eight test rows are the last figure in the notebook. This file is the finished run. A single printed log line is one image at one step, so use the chart when you want the history and the test figure when you want to talk about picture quality.</p>
+      <p>The notebook's own training output starts again at epoch 17 and ends at epoch 20. The chart still contains all 20 epochs. The checkpoint restores the earlier loss history, and the plot is drawn from that full history.</p>
+      <p>Nothing else was measured. There is no FID, LPIPS, SSIM, or classification accuracy. The evidence is the eight curves, plus those eight test photographs.</p>
 
-      <h2>What was measured</h2>
-      <p>Eight training losses, plus a visual check of eight test photos. No FID, LPIPS, SSIM, or classification accuracy was computed.</p>
-      <p>The training cell prints only the latest five lines, and those windows overlap. Use the chart for the history.</p>
-      <p>The names follow the code after the <code>BtoA</code> swap:</p>
+      <h2>What one printed line is</h2>
+      <p>Every 100 training steps, the cell prints the latest five log lines. The next print overlaps that window, so reading the printed text as a sequence will count the same steps more than once. The chart is the clean history.</p>
+      <p>Because the batch size is 1, a line is one photograph and one print. A spike is one difficult image. It is not an epoch average.</p>
+      <p>The names are the ones left after the <code>BtoA</code> swap, explained on the <button type="button" class="text-link" data-tab="model">How the model works</button> tab. In short:</p>
       <ul>
-        <li><code>D_A</code> and <code>G_A</code> are the Ukiyo-e critic and the generator trying to fool it.</li>
-        <li><code>D_B</code> and <code>G_B</code> are the photo critic and the generator trying to fool it.</li>
-        <li><code>cycle_A</code> is photo → print → photo, already multiplied by 10.</li>
-        <li><code>cycle_B</code> is print → photo → print, already multiplied by 10.</li>
-        <li><code>idt_A</code> is <code>G_A</code> asked to leave a real print unchanged, already multiplied by 5.</li>
-        <li><code>idt_B</code> is <code>G_B</code> asked to leave a real photo unchanged, already multiplied by 5.</li>
+        <li><code>D_A</code> is the print critic. <code>G_A</code> is the photo-to-print network trying to fool that critic.</li>
+        <li><code>D_B</code> is the photo critic. <code>G_B</code> is the print-to-photo network trying to fool that critic.</li>
+        <li><code>cycle_A</code> is photo, then print, then back to photo. The number already includes the weight of 10.</li>
+        <li><code>cycle_B</code> is print, then photo, then back to print. The number already includes the weight of 10.</li>
+        <li><code>idt_A</code> is <code>G_A</code> asked to leave a real print unchanged. The number already includes the weight of 5.</li>
+        <li><code>idt_B</code> is <code>G_B</code> asked to leave a real photograph unchanged. The number already includes the weight of 5.</li>
       </ul>
-      <p>The last logged step is epoch 20, iteration 125,700: <code>D_A</code> 0.037, <code>G_A</code> 0.695, <code>cycle_A</code> 0.822, <code>idt_A</code> 0.356, <code>D_B</code> 0.105, <code>G_B</code> 0.534, <code>cycle_B</code> 0.570, <code>idt_B</code> 0.258. Quote the shape of the chart. Quote that line only as an example of one step.</p>
+      <p>The last logged step is epoch 20, iteration 125,700: <code>D_A</code> 0.037, <code>G_A</code> 0.695, <code>cycle_A</code> 0.822, <code>idt_A</code> 0.356, <code>D_B</code> 0.105, <code>G_B</code> 0.534, <code>cycle_B</code> 0.570, <code>idt_B</code> 0.258.</p>
+      <p>Treat that line as an example of one step near the end. Describe the shape of the chart when you describe the run.</p>
 
-      <h2>How to read the eight graphs</h2>
-      <p>Each panel is one loss. The horizontal axis is a log step, not an epoch. One point is written every 100 training iterations. An epoch of 6,287 images is about 63 points. Twenty epochs are about 1,257 points, which is why the axis runs to roughly 1,250. The first half of the axis is the constant learning rate. The second half is the decay.</p>
-      <p>The vertical scales are not the same. A cycle value near 1 and a discriminator value near 0.2 are not the same kind of number. The cycle and identity panels already include their weights.</p>
-      <p>The adversarial panels, <code>D_A</code>, <code>G_A</code>, <code>D_B</code>, and <code>G_B</code>, stay jagged for the whole run. <code>D_A</code> and <code>D_B</code> sit mostly between about 0.05 and 0.3, with spikes above 0.5. <code>G_A</code> and <code>G_B</code> sit mostly between about 0.2 and 1.0, with spikes near 1.75. They do not fall toward zero. For a least-squares GAN that is a balance: the critic keeps detecting some fakes, and the generator keeps fooling it on others. A spike is one difficult image, because the point is one batch of size 1.</p>
-      <p>The cycle and identity panels are the content curves. <code>cycle_A</code> starts near 8 and <code>cycle_B</code> near 4.5. Both fall within the first few epochs, about the first 200 log steps, and then sit in a noisy band around 1. <code>idt_A</code> starts near 2 and <code>idt_B</code> near 2.5, fall on the same early schedule, and then stay mostly below 1. <code>idt_B</code> has one sharp spike near 4 later in training. The early drop means the round trip started preserving the input. The later flat band means that part of training had settled. The line does not become smooth at the end, because each point is still one image.</p>
+      <h2>How the chart is laid out</h2>
+      <p>Each panel is one of those eight numbers, drawn for the whole run.</p>
+      <p>The horizontal axis is a log step, not an epoch. One point is written every 100 training iterations. An epoch of 6,287 images is about 63 points. Twenty epochs are about 1,257 points, which is why the axis runs to roughly 1,250. The left half of the axis is the ten epochs at learning rate 0.0002. The right half is the ten epochs in which that rate falls to zero.</p>
+      <p>The vertical scales are separate. A cycle value near 1 and a critic value near 0.2 are different kinds of number. The cycle and identity panels already include their weights, so they sit on a larger scale than the raw pixel error.</p>
+
+      <h2>The four jagged curves</h2>
+      <p><code>D_A</code>, <code>G_A</code>, <code>D_B</code>, and <code>G_B</code> stay jagged for the whole run.</p>
+      <p><code>D_A</code> and <code>D_B</code> sit mostly between about 0.05 and 0.3, with spikes above 0.5. <code>G_A</code> and <code>G_B</code> sit mostly between about 0.2 and 1.0, with spikes near 1.75. None of them trends down toward zero.</p>
+      <p>For a least-squares GAN, that shape is a balance. The critic keeps catching some fakes, and the translator keeps getting others accepted. If the critic's curve fell to zero and stayed there, the critic would have given up. If the translator's curve fell to zero and stayed there, the critic would no longer be providing a useful target. The noise is one image at a time: a hard photograph makes a spike, and the next photograph does not.</p>
+
+      <h2>The four curves that fall, then level off</h2>
+      <p><code>cycle_A</code>, <code>cycle_B</code>, <code>idt_A</code>, and <code>idt_B</code> are the content curves.</p>
+      <p><code>cycle_A</code> starts near 8 and <code>cycle_B</code> near 4.5. Both fall within the first few epochs, about the first 200 points on the chart, and then sit in a noisy band around 1. On the network's -1 to 1 pixel scale, a plotted value near 1 means the average absolute error of the round trip is about 0.1, because the plot includes the factor of 10.</p>
+      <p><code>idt_A</code> starts near 2 and <code>idt_B</code> near 2.5. They fall on the same early schedule and then stay mostly below 1. <code>idt_B</code> has one sharp spike near 4 later in training, one photograph that the print-to-photo network failed to leave alone.</p>
+      <p>The early drop means the round trip started keeping the input. The later flat band means that part of training had settled. The line stays noisy at the end because each point is still one image.</p>
 
       <h2>The eight test rows</h2>
-      <p>The last figure shows eight test photos. Each row is the photo, the <code>G_A</code> translation, and the reconstructed photo.</p>
-      <p>The reconstructions generally keep the scene. That matches the cycle loss settling near 1. The middle column is uneven. Some rows, such as the canal and the duck, read as painted. Others look closer to a grain laid over the photograph. The last landscape loses the hills. That is the quality this 20-epoch checkpoint reached. The figure is a sample of eight images, not a score over the whole test set.</p>
+      <p>The last figure shows eight photographs the training loop did not use for those steps. Each row has three pictures:</p>
+      <ol>
+        <li>The photograph, labeled <code>real_A</code> in the code.</li>
+        <li>The print <code>G_A</code> made from it, labeled <code>fake_B</code>.</li>
+        <li>The photograph reconstructed by sending that print through <code>G_B</code>, labeled <code>rec_A</code>.</li>
+      </ol>
+      <p>Look at the third column first. The scenes mostly survive: the layout you see on the left is still there on the right. That matches the cycle curves settling near 1.</p>
+      <p>Then look at the middle column, which is the actual product. It is uneven. Some rows, such as the canal and the duck, read as painted. Others look closer to the original photograph with a grain and a palette laid over it. The last landscape loses the hills. That spread is the quality this 20-epoch checkpoint reached.</p>
+      <p>The figure is eight examples. It is not a score over the whole test set, and the run did not compute one.</p>
 
-      <h2>Points worth saying</h2>
+      <h2>If you are explaining the figure</h2>
       <ul>
-        <li>The training signal for style is unpaired. The cycle forces content to survive a round trip. The critic forces the output onto the look of the other set.</li>
-        <li>Identity loss is a color anchor. Cycle loss is a content anchor. The GAN loss is the style pressure.</li>
-        <li>The displayed adversarial losses are supposed to look noisy. The cycle and identity losses are the ones that should fall and then level off.</li>
-        <li>After epoch 20 the learning rate is zero and <code>latest.pt</code> is the finished checkpoint.</li>
+        <li>The prints and the photographs were never pairs. The round trip is what kept the scene, and the print critic is what pushed the look.</li>
+        <li>The jagged critic and translator curves are the healthy ones. The cycle and identity curves are the ones that should fall and then sit still.</li>
+        <li>A cycle value on the chart is already multiplied by 10. Near 1 means a small pixel error on the way home, on the -1 to 1 scale the network uses.</li>
+        <li>The middle picture in each test row is the thing the project is for. Some of them look like prints. Some of them mostly restyle the photograph. The reconstructed photo can look faithful either way.</li>
+        <li>After epoch 20 the learning rate is zero, and <code>latest.pt</code> is the finished checkpoint.</li>
       </ul>
     </section>
 
     <section id="panel-run" class="panel" role="tabpanel" aria-labelledby="tab-run" hidden>
       <h2>Train</h2>
-      <p>Training does not run on this machine. Upload <code>src/notebooks/ukiyoe_cyclegan.ipynb</code> to Colab, set the runtime to a T4 GPU, and run the cells from the top.</p>
-      <p>The schedule is 20 epochs: 10 at learning rate 0.0002, then 10 of linear decay. One free session will not finish that. If the session drops, start a new one and run the cells from the top again. Training continues from <code>MyDrive/ukiyoe-cyclegan/checkpoints/ukiyoe2photo/latest.pt</code>. A file saved at the end of an epoch resumes at the next epoch. A file saved partway through resumes the rest of that epoch.</p>
-      <p>The finished run is already stored. <code>src/notebooks/trained_fin.ipynb</code> shows epoch 20 ending with the learning rate at 0. Running the training notebook again on that checkpoint does not train further.</p>
-      <p>During training, every 100 iterations the cell prints the last five stat lines and overwrites <code>checkpoints/ukiyoe2photo/loss_plot.png</code> with the full loss history.</p>
+      <p>Training stays off this machine. The notebook that trains is <code>src/notebooks/ukiyoe_cyclegan.ipynb</code>. Upload that file to Colab, choose a T4 GPU runtime, and run the cells from the top.</p>
+      <p>The schedule is 20 epochs. For the first 10, the learning rate stays at 0.0002. For the next 10, it falls in a straight line to zero. One free Colab session will not finish that. If the session drops, start a new one and run the cells from the top again. The notebook looks for <code>MyDrive/ukiyoe-cyclegan/checkpoints/ukiyoe2photo/latest.pt</code> and continues from whatever that file contains. A file saved at the end of an epoch resumes at the next epoch. A file saved partway through an epoch resumes the rest of that epoch.</p>
+      <p>The finished run is already stored. <code>src/notebooks/trained_fin.ipynb</code> shows epoch 20 ending with the learning rate at 0. Running the training notebook again on that checkpoint does not train further, because a learning rate of zero takes steps of size zero.</p>
+      <p>During training, every 100 steps the cell prints the last five stat lines and overwrites <code>checkpoints/ukiyoe2photo/loss_plot.png</code> with the chart of the whole history. How to read that chart is the <button type="button" class="text-link" data-tab="results">How to read the results</button> tab.</p>
 
-      <h2>Translate a photo locally</h2>
-      <p>The page runs <code>G_A</code> in the browser from <code>src/client/public/g_a.onnx</code>. That file is the generator only, about 45 MB. The training checkpoint stays at <code>src/server/ukiyoe_cyclegan.pt</code>. Rebuild the ONNX file from it with <code>PYTHONPATH=src uv run python src/server/export_onnx.py</code>.</p>
-      <p>From the repo root:</p>
+      <h2>Translate a photo on this machine</h2>
+      <p>The page people use does not load PyTorch, and it does not load the training checkpoint. It runs one network, the photo-to-print translator <code>G_A</code>, inside the browser.</p>
+      <p>That network is stored as <code>src/client/public/g_a.onnx</code>, about 45 MB. ONNX here is a frozen copy of <code>G_A</code> that the browser's runtime can execute. The full training checkpoint, about 340 MB, stays at <code>src/server/ukiyoe_cyclegan.pt</code>. That file holds all four networks and the loss history. It is not committed. If you replace the checkpoint and want the page to match it, export <code>G_A</code> again from the repository root:</p>
+      <pre><code>PYTHONPATH=src uv run python src/server/export_onnx.py</code></pre>
+      <p>To build and open the page locally, from the repository root:</p>
       <pre><code>./start</code></pre>
       <p>The script installs the Python and npm dependencies, builds the page, and serves it at http://127.0.0.1:8000.</p>
-      <p>On the page, choose one photo. The browser stretches it to 256×256, runs the ONNX model, and shows that picture beside the Ukiyo-e result. The first translation also downloads the model file.</p>
-      <p>To put the page on Vercel, set the project root to <code>src/client</code>, the framework to Vite, the build command to <code>npm run build</code>, and the output directory to <code>dist</code>. The ONNX file has to be in the deployment. The training checkpoint does not.</p>
+      <p>On the page, choose one photo. The browser stretches it to 256×256, because that is the size <code>G_A</code> was trained to see. A wide photo is squashed to a square as part of that stretch. The page then shows that 256×256 picture beside the print. The first translation also downloads the model file, about 45 MB. Later translations reuse it.</p>
+      <p>The hosted copy of the same page is the <button type="button" class="text-link" data-tab="deploy">How to deploy</button> tab.</p>
+    </section>
+
+    <section id="panel-deploy" class="panel" role="tabpanel" aria-labelledby="tab-deploy" hidden>
+      <p>The same page you can run locally is already hosted at <a href="https://ukiyoe-gan-ni3ravs-projects.vercel.app">ukiyoe-gan-ni3ravs-projects.vercel.app</a>. Someone who opens that address downloads the photo-to-print network and runs it in their own browser. The server is only serving files. It does not translate the photograph.</p>
+      <p>The Vercel project is <code>ukiyoe-gan</code>, on the team <code>ni3ravs-projects</code>. Production follows the <code>master</code> branch of <a href="https://github.com/ni3rav/style-transfer-gan">github.com/ni3rav/style-transfer-gan</a>. A push to that branch builds the page and publishes it.</p>
+
+      <h2>What actually gets published</h2>
+      <p>Vercel does not build the Python training code. The project root is <code>src/client</code>, so the build sees only the website.</p>
+      <table>
+        <thead>
+          <tr><th>Setting</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Framework</td><td>Vite</td></tr>
+          <tr><td>Build command</td><td><code>npm run build</code></td></tr>
+          <tr><td>Output directory</td><td><code>dist</code></td></tr>
+          <tr><td>Node.js</td><td>24.x</td></tr>
+          <tr><td>Production branch</td><td><code>master</code></td></tr>
+        </tbody>
+      </table>
+      <p>The build copies <code>src/client/public/g_a.onnx</code> into <code>dist</code>. That file is <code>G_A</code> only, the photo-to-print network, about 45 MB. The published site is about 58 MB once the page and the browser runtime are included. The training checkpoint, <code>src/server/ukiyoe_cyclegan.pt</code>, is left out. It is listed in <code>.gitignore</code>, and the page never asks for it.</p>
+      <p>The dashboard for this project is <a href="https://vercel.com/ni3ravs-projects/ukiyoe-gan">vercel.com/ni3ravs-projects/ukiyoe-gan</a>.</p>
+
+      <h2>Use the hosted page</h2>
+      <p>Open the address above and choose one photo. The browser stretches it to 256×256, runs <code>G_A</code>, and shows that square picture beside the print. The first translation downloads the model, so it waits on the download as well as on the translation. Later translations in the same visit reuse the model.</p>
+
+      <h2>Replace the network on the site</h2>
+      <p>When a new checkpoint should become the public translator, export <code>G_A</code> again from the repository root:</p>
+      <pre><code>PYTHONPATH=src uv run python src/server/export_onnx.py</code></pre>
+      <p>That overwrites <code>src/client/public/g_a.onnx</code>. Commit that file and push <code>master</code>. Vercel rebuilds <code>src/client</code>, and the new file replaces the one visitors download.</p>
     </section>
   </main>
   <script>
@@ -313,6 +416,13 @@
           : tabs[(index - 1 + tabs.length) % tabs.length];
         select(next);
         next.focus();
+      });
+    });
+
+    document.querySelectorAll("[data-tab]").forEach((link) => {
+      link.addEventListener("click", () => {
+        const tab = document.getElementById("tab-" + link.getAttribute("data-tab"));
+        if (tab) select(tab);
       });
     });
 
